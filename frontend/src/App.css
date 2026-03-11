@@ -1,6 +1,17 @@
 body {
-  font-family: sans-serif;
-  padding: 2rem;
+  margin: 0;
+  font-family:
+    "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+  background:
+    radial-gradient(circle at top left, #fde68a 0, rgba(253, 230, 138, 0.35) 25%, transparent 50%),
+    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  color: #0f172a;
+}
+
+#root {
+  min-height: 100vh;
 }
 
 table {
@@ -10,52 +21,217 @@ table {
 
 th,
 td {
-  border: 1px solid #ddd;
-  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #dbe4f0;
+  padding: 0.8rem 1rem;
   text-align: left;
 }
 
 th {
-  background: #f5f5f5;
+  background: #eff6ff;
+  color: #1e3a8a;
 }
 
 tr:nth-child(even) {
-  background: #fafafa;
+  background: rgba(248, 250, 252, 0.75);
 }
 
-/* Token form */
+.app-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.token-form,
+.panel,
+.status-card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
 
 .token-form {
-  max-width: 360px;
+  max-width: 380px;
+  margin: 10vh auto 0;
+  padding: 1.5rem;
 }
 
-.token-form input {
+.token-form input,
+.lab-select select {
   width: 100%;
-  padding: 0.5rem;
-  margin-bottom: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 0.75rem 0.9rem;
+  margin-top: 0.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
   box-sizing: border-box;
+  background: #fff;
+}
+
+.token-form button,
+.btn-disconnect,
+.nav-button {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.token-form button:hover,
+.btn-disconnect:hover,
+.nav-button:hover {
+  transform: translateY(-1px);
 }
 
 .token-form button {
-  padding: 0.5rem 1.25rem;
+  margin-top: 0.4rem;
+  padding: 0.7rem 1.2rem;
+  background: #0f766e;
+  color: #fff;
 }
-
-/* Header with disconnect */
 
 .app-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
-.app-header h1 {
+.app-header h1,
+.dashboard-toolbar h2,
+.panel h2,
+.panel h3 {
   margin: 0;
 }
 
-.btn-disconnect {
-  padding: 0.25rem 0.75rem;
+.eyebrow {
+  margin: 0 0 0.35rem;
   font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.page-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.nav-button {
+  padding: 0.55rem 1rem;
+  background: transparent;
+  color: #334155;
+}
+
+.nav-button-active {
+  background: #0f172a;
+  color: #fff;
+}
+
+.btn-disconnect {
+  padding: 0.55rem 0.95rem;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-card {
+  padding: 1rem 1.2rem;
+}
+
+.status-card-error {
+  color: #991b1b;
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.dashboard {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-toolbar p {
+  margin: 0.35rem 0 0;
+  color: #475569;
+}
+
+.lab-select {
+  min-width: 220px;
+  font-weight: 600;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.panel {
+  padding: 1rem 1.1rem 1.2rem;
+}
+
+.chart-panel {
+  min-height: 360px;
+}
+
+.table-panel {
+  grid-column: 1 / -1;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 1rem 0.85rem 2rem;
+  }
+
+  .app-header,
+  .dashboard-toolbar,
+  .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: space-between;
+  }
 }
