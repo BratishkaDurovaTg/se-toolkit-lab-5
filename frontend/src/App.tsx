@@ -1,5 +1,4 @@
-import { FormEvent, useEffect, useReducer, useState } from 'react'
-import Dashboard, { extractLabs, type LabOption } from './Dashboard'
+import { useState, useEffect, useReducer, FormEvent } from 'react'
 import './App.css'
 
 const STORAGE_KEY = 'api_key'
@@ -10,8 +9,6 @@ interface Item {
   title: string
   created_at: string
 }
-
-type Page = 'items' | 'dashboard'
 
 type FetchState =
   | { status: 'idle' }
@@ -36,9 +33,10 @@ function fetchReducer(_state: FetchState, action: FetchAction): FetchState {
 }
 
 function App() {
-  const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '')
+  const [token, setToken] = useState(
+    () => localStorage.getItem(STORAGE_KEY) ?? '',
+  )
   const [draft, setDraft] = useState('')
-  const [page, setPage] = useState<Page>('items')
   const [fetchState, dispatch] = useReducer(fetchReducer, { status: 'idle' })
 
   useEffect(() => {
@@ -71,7 +69,6 @@ function App() {
     localStorage.removeItem(STORAGE_KEY)
     setToken('')
     setDraft('')
-    setPage('items')
   }
 
   if (!token) {
@@ -90,80 +87,40 @@ function App() {
     )
   }
 
-  const labs: LabOption[] =
-    fetchState.status === 'success' ? extractLabs(fetchState.items) : []
-
   return (
-    <div className="app-shell">
+    <div>
       <header className="app-header">
-        <div>
-          <p className="eyebrow">Learning Management Service</p>
-          <h1>{page === 'items' ? 'Items' : 'Analytics Dashboard'}</h1>
-        </div>
-        <div className="header-actions">
-          <nav className="page-nav" aria-label="Page navigation">
-            <button
-              className={page === 'items' ? 'nav-button nav-button-active' : 'nav-button'}
-              onClick={() => setPage('items')}
-              type="button"
-            >
-              Items
-            </button>
-            <button
-              className={
-                page === 'dashboard' ? 'nav-button nav-button-active' : 'nav-button'
-              }
-              onClick={() => setPage('dashboard')}
-              type="button"
-            >
-              Dashboard
-            </button>
-          </nav>
-          <button className="btn-disconnect" onClick={handleDisconnect}>
-            Disconnect
-          </button>
-        </div>
+        <h1>Items</h1>
+        <button className="btn-disconnect" onClick={handleDisconnect}>
+          Disconnect
+        </button>
       </header>
 
-      {page === 'items' && (
-        <>
-          {fetchState.status === 'loading' && <p className="status-card">Loading items...</p>}
-          {fetchState.status === 'error' && (
-            <p className="status-card status-card-error">Error: {fetchState.message}</p>
-          )}
+      {fetchState.status === 'loading' && <p>Loading...</p>}
+      {fetchState.status === 'error' && <p>Error: {fetchState.message}</p>}
 
-          {fetchState.status === 'success' && (
-            <section className="panel table-panel">
-              <div className="panel-header">
-                <h2>Items</h2>
-                <span>{fetchState.items.length} records</span>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Item Type</th>
-                    <th>Title</th>
-                    <th>Created at</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fetchState.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.id}</td>
-                      <td>{item.type}</td>
-                      <td>{item.title}</td>
-                      <td>{item.created_at}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          )}
-        </>
+      {fetchState.status === 'success' && (
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>ItemType</th>
+              <th>Title</th>
+              <th>Created at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fetchState.items.map((item) => (
+              <tr key={item.id}>
+                <td>{item.id}</td>
+                <td>{item.type}</td>
+                <td>{item.title}</td>
+                <td>{item.created_at}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-
-      {page === 'dashboard' && <Dashboard token={token} labs={labs} />}
     </div>
   )
 }

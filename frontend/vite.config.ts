@@ -22,7 +22,6 @@ export default defineConfig(({ mode }) => {
         "/items": { target, changeOrigin: true },
         "/learners": { target, changeOrigin: true },
         "/interactions": { target, changeOrigin: true },
-        "/analytics": { target, changeOrigin: true },
         "/docs": { target, changeOrigin: true },
         "/openapi.json": { target, changeOrigin: true },
       },
