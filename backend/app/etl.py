@@ -8,7 +8,7 @@ Both require HTTP Basic Auth (email + password from settings).
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 import httpx
 from sqlmodel import func, select
@@ -18,6 +18,44 @@ from app.models.interaction import InteractionLog
 from app.models.item import ItemRecord
 from app.models.learner import Learner
 from app.settings import settings
+
+
+class AutocheckerItem(TypedDict):
+    """Raw item payload returned by the autochecker API."""
+
+    lab: str
+    task: str | None
+    title: str
+    type: Literal["lab", "task"]
+
+
+class AutocheckerLog(TypedDict):
+    """Raw log payload returned by the autochecker API."""
+
+    id: int
+    student_id: str
+    group: str
+    lab: str
+    task: str | None
+    score: NotRequired[float | None]
+    passed: NotRequired[int | None]
+    total: NotRequired[int | None]
+    submitted_at: str
+
+
+class AutocheckerLogsResponse(TypedDict):
+    """Paginated autochecker logs response."""
+
+    logs: list[AutocheckerLog]
+    count: int
+    has_more: bool
+
+
+class SyncSummary(TypedDict):
+    """Return payload for the sync endpoint."""
+
+    new_records: int
+    total_records: int
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +68,15 @@ def _parse_iso_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
 
 
-async def fetch_items() -> list[dict]:
+def _get_autochecker_auth() -> httpx.BasicAuth:
+    """Build HTTP Basic Auth credentials for the autochecker API."""
+    return httpx.BasicAuth(
+        username=settings.autochecker_email,
+        password=settings.autochecker_password,
+    )
+
+
+async def fetch_items() -> list[AutocheckerItem]:
     """Fetch the lab/task catalog from the autochecker API.
 
     TODO: Implement this function.
@@ -43,17 +89,16 @@ async def fetch_items() -> list[dict]:
     - Raise an exception if the response status is not 200
     """
     url = f"{settings.autochecker_api_url}/api/items"
-    auth = (settings.autochecker_email, settings.autochecker_password)
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, auth=auth)
+        response = await client.get(url, auth=_get_autochecker_auth())
         response.raise_for_status()
-    payload = response.json()
+    payload = cast(object, response.json())
     if not isinstance(payload, list):
         raise ValueError("Unexpected /api/items response shape")
-    return payload
+    return cast(list[AutocheckerItem], payload)
 
 
-async def fetch_logs(since: datetime | None = None) -> list[dict]:
+async def fetch_logs(since: datetime | None = None) -> list[AutocheckerLog]:
     """Fetch check results from the autochecker API.
 
     TODO: Implement this function.
@@ -70,8 +115,7 @@ async def fetch_logs(since: datetime | None = None) -> list[dict]:
     - Return the combined list of all log dicts from all pages
     """
     url = f"{settings.autochecker_api_url}/api/logs"
-    auth = (settings.autochecker_email, settings.autochecker_password)
-    all_logs: list[dict] = []
+    all_logs: list[AutocheckerLog] = []
     current_since = since.isoformat() if since is not None else None
 
     async with httpx.AsyncClient() as client:
@@ -80,19 +124,26 @@ async def fetch_logs(since: datetime | None = None) -> list[dict]:
             if current_since is not None:
                 params["since"] = current_since
 
-            response = await client.get(url, auth=auth, params=params)
+            response = await client.get(
+                url, auth=_get_autochecker_auth(), params=params
+            )
             response.raise_for_status()
-            payload = response.json()
-
-            logs = payload.get("logs", [])
-            has_more = payload.get("has_more", False)
-            if not isinstance(logs, list):
+            payload = cast(object, response.json())
+            if not isinstance(payload, dict):
                 raise ValueError("Unexpected /api/logs response shape")
+            typed_payload = cast(AutocheckerLogsResponse, payload)
+
+            logs = typed_payload["logs"]
+            has_more = typed_payload["has_more"]
 
             all_logs.extend(logs)
             if not logs or not has_more:
                 break
-            current_since = logs[-1]["submitted_at"]
+
+            next_since = logs[-1]["submitted_at"]
+            if next_since == current_since:
+                break
+            current_since = next_since
 
     return all_logs
 
@@ -102,7 +153,7 @@ async def fetch_logs(since: datetime | None = None) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-async def load_items(items: list[dict], session: AsyncSession) -> int:
+async def load_items(items: list[AutocheckerItem], session: AsyncSession) -> int:
     """Load items (labs and tasks) into the database.
 
     TODO: Implement this function.
@@ -126,22 +177,20 @@ async def load_items(items: list[dict], session: AsyncSession) -> int:
     created = 0
     labs_by_short_id: dict[str, ItemRecord] = {}
 
-    labs = [item for item in items if item.get("type") == "lab"]
-    tasks = [item for item in items if item.get("type") == "task"]
+    labs = [item for item in items if item["type"] == "lab"]
+    tasks = [item for item in items if item["type"] == "task"]
 
     for lab in labs:
-        short_id = lab.get("lab")
-        title = lab.get("title")
-        if not short_id or not title:
-            continue
+        short_id = lab["lab"]
+        title = lab["title"]
 
-        existing_lab = await session.exec(
+        existing_lab_result = await session.exec(
             select(ItemRecord).where(
                 ItemRecord.type == "lab",
                 ItemRecord.title == title,
             )
         )
-        lab_record = existing_lab.first()
+        lab_record = existing_lab_result.first()
         if lab_record is None:
             lab_record = ItemRecord(type="lab", title=title)
             session.add(lab_record)
@@ -150,22 +199,20 @@ async def load_items(items: list[dict], session: AsyncSession) -> int:
         labs_by_short_id[short_id] = lab_record
 
     for task in tasks:
-        lab_short_id = task.get("lab")
-        title = task.get("title")
-        if not lab_short_id or not title:
-            continue
+        lab_short_id = task["lab"]
+        title = task["title"]
         lab_record = labs_by_short_id.get(lab_short_id)
         if lab_record is None:
             continue
 
-        existing_task = await session.exec(
+        existing_task_result = await session.exec(
             select(ItemRecord).where(
                 ItemRecord.type == "task",
                 ItemRecord.title == title,
                 ItemRecord.parent_id == lab_record.id,
             )
         )
-        if existing_task.first() is not None:
+        if existing_task_result.first() is not None:
             continue
 
         session.add(
@@ -178,7 +225,9 @@ async def load_items(items: list[dict], session: AsyncSession) -> int:
 
 
 async def load_logs(
-    logs: list[dict], items_catalog: list[dict], session: AsyncSession
+    logs: list[AutocheckerLog],
+    items_catalog: list[AutocheckerItem],
+    session: AsyncSession,
 ) -> int:
     """Load interaction logs into the database.
 
@@ -220,55 +269,70 @@ async def load_logs(
 
     item_title_by_key: dict[tuple[str, str | None], str] = {}
     for item in items_catalog:
-        lab_short_id = item.get("lab")
-        task_short_id = item.get("task")
-        title = item.get("title")
-        if not lab_short_id or not title:
-            continue
+        lab_short_id = item["lab"]
+        task_short_id = item["task"]
+        title = item["title"]
         key = (lab_short_id, task_short_id)
         item_title_by_key[key] = title
 
-    for log in logs:
-        student_external_id = log.get("student_id")
-        if not student_external_id:
-            continue
+    item_result = await session.exec(select(ItemRecord))
+    db_items = item_result.all()
+    db_labs_by_title = {
+        item.title: item for item in db_items if item.type == "lab" and item.id is not None
+    }
+    db_tasks_by_parent_and_title = {
+        (item.parent_id, item.title): item
+        for item in db_items
+        if item.type == "task" and item.parent_id is not None and item.id is not None
+    }
 
-        learner_result = await session.exec(
-            select(Learner).where(Learner.external_id == student_external_id)
-        )
-        learner = learner_result.first()
+    learner_result = await session.exec(select(Learner))
+    learners_by_external_id = {
+        learner.external_id: learner for learner in learner_result.all()
+    }
+
+    interaction_result = await session.exec(select(InteractionLog.external_id))
+    existing_interaction_ids = {
+        interaction_id
+        for interaction_id in interaction_result.all()
+        if interaction_id is not None
+    }
+
+    for log in logs:
+        student_external_id = log["student_id"]
+
+        learner = learners_by_external_id.get(student_external_id)
         if learner is None:
             learner = Learner(
                 external_id=student_external_id,
-                student_group=log.get("group", ""),
+                student_group=log["group"],
             )
             session.add(learner)
             await session.flush()
+            learners_by_external_id[student_external_id] = learner
 
-        item_title = item_title_by_key.get((log.get("lab"), log.get("task")))
-        if item_title is None:
+        lab_short_id = log["lab"]
+        task_short_id = log["task"]
+        lab_title = item_title_by_key.get((lab_short_id, None))
+        if lab_title is None:
             continue
-        item_result = await session.exec(
-            select(ItemRecord).where(ItemRecord.title == item_title)
-        )
-        item = item_result.first()
+        lab_item = db_labs_by_title.get(lab_title)
+        if lab_item is None or lab_item.id is None:
+            continue
+
+        item_title = item_title_by_key.get((lab_short_id, task_short_id))
+        if item_title is None:
+            item = lab_item
+        else:
+            item = db_tasks_by_parent_and_title.get((lab_item.id, item_title))
         if item is None:
             continue
 
-        interaction_external_id = log.get("id")
-        if interaction_external_id is None:
-            continue
-        existing_interaction = await session.exec(
-            select(InteractionLog).where(
-                InteractionLog.external_id == interaction_external_id
-            )
-        )
-        if existing_interaction.first() is not None:
+        interaction_external_id = log["id"]
+        if interaction_external_id in existing_interaction_ids:
             continue
 
-        submitted_at = log.get("submitted_at")
-        if submitted_at is None:
-            continue
+        submitted_at = log["submitted_at"]
         session.add(
             InteractionLog(
                 external_id=interaction_external_id,
@@ -281,6 +345,7 @@ async def load_logs(
                 created_at=_parse_iso_datetime(submitted_at),
             )
         )
+        existing_interaction_ids.add(interaction_external_id)
         created += 1
 
     await session.commit()
@@ -292,7 +357,7 @@ async def load_logs(
 # ---------------------------------------------------------------------------
 
 
-async def sync(session: AsyncSession) -> dict:
+async def sync(session: AsyncSession) -> SyncSummary:
     """Run the full ETL pipeline.
 
     TODO: Implement this function.
@@ -310,7 +375,9 @@ async def sync(session: AsyncSession) -> dict:
     items = await fetch_items()
     await load_items(items, session)
 
-    last_timestamp_result = await session.exec(select(func.max(InteractionLog.created_at)))
+    last_timestamp_result = await session.exec(
+        select(func.max(InteractionLog.created_at))
+    )
     last_timestamp = last_timestamp_result.one()
 
     logs = await fetch_logs(since=last_timestamp)
